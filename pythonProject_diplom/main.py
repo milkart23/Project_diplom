@@ -10,10 +10,10 @@ class FontEditor:
         self.root = root
         self.root.title("Редактор шрифтов")
 
-        # Настройка главного окна
+        
         self.root.geometry("1200x800")
 
-        # Переменные для хранения данных
+        
         self.image_path = None
         self.original_image = None
         self.display_image = None
@@ -30,19 +30,19 @@ class FontEditor:
         self.image_offset = [0, 0]
         self.image_drag_start = None
 
-        # Режимы работы
-        self.mode = "draw"  # 'draw' - рисование, 'pan' - перемещение
-        self.point_operation = "add"  # 'add' - добавление, 'resize' - изменение размера
+        
+        self.mode = "draw" 
+        self.point_operation = "add"  
 
-        # Цвета и параметры
-        self.min_radius = 1  # Минимальный размер круга 1 пиксель
+        
+        self.min_radius = 1  
         self.max_radius = 20
         self.default_radius = 5
-        self.point_color = (255, 0, 0, 128)  # Полупрозрачный красный (RGBA)
-        self.curve_color = (0, 0, 255, 128)  # Полупрозрачный синий
+        self.point_color = (255, 0, 0, 128) 
+        self.curve_color = (0, 0, 255, 128)  
         self.preview_color = "black"
 
-        # Создание интерфейса
+       
         self.create_widgets()
 
         # Привязка событий
@@ -116,18 +116,18 @@ class FontEditor:
         self.preview_zoom_out.pack(side=tk.LEFT, padx=5)
 
     def bind_events(self):
-        # События левой панели
+       
         self.image_canvas.bind("<Button-1>", self.on_image_click)
         self.image_canvas.bind("<B1-Motion>", self.on_image_drag)
         self.image_canvas.bind("<ButtonRelease-1>", self.on_image_release)
         self.image_canvas.bind("<MouseWheel>", self.on_mouse_wheel)  # Изменение размера круга
 
-        # Горячие клавиши
+        
         self.root.bind("<d>", lambda e: self.set_mode("draw"))
         self.root.bind("<p>", lambda e: self.set_mode("pan"))
         self.root.bind("<r>", lambda e: self.toggle_resize_mode())
 
-        # События правой панели
+        
         self.preview_canvas.bind("<Button-1>", self.start_pan)
         self.preview_canvas.bind("<B1-Motion>", self.pan_preview)
         self.preview_canvas.bind("<ButtonRelease-1>", self.stop_pan)
@@ -179,7 +179,7 @@ class FontEditor:
                         return
 
             # Добавление новой точки
-            if self.point_operation == "add" and len(self.current_curve) < 6:  # До 6 точек для 5-й степени
+            if self.point_operation == "add" and len(self.current_curve) < 6:  
                 self.current_curve.append((x, y, self.default_radius))
                 self.update_image_display()
                 self.update_preview()
@@ -235,7 +235,7 @@ class FontEditor:
         self.image_drag_start = None
 
     def bezier_point(self, points, t):
-        """Вычисляет точку на кривой Безье для заданного t (0-1)"""
+        
         n = len(points) - 1
         x, y = 0.0, 0.0
         for i, (px, py) in enumerate(points):
@@ -246,11 +246,10 @@ class FontEditor:
         return x, y
 
     def bezier_radius(self, radii, t):
-        """Вычисляет радиус на кривой Безье для заданного t (0-1)"""
+       
         n = len(radii) - 1
         r = 0.0
         for i, radius in enumerate(radii):
-            # Биномиальный коэффициент
             coeff = math.comb(n, i) * (1 - t)**(n - i) * t**i
             r += radius * coeff
         return r
@@ -275,23 +274,21 @@ class FontEditor:
                 if len(curve) < 2:
                     continue
 
-                # Создаем список точек для кривой Безье
                 points = [(p[0], p[1]) for p in curve]
                 radii = [p[2] for p in curve]
 
-                # Рисуем кривую Безье с переменной шириной
                 steps = 20
                 for i in range(steps):
                     t1 = i / steps
                     t2 = (i + 1) / steps
 
-                    # Вычисляем точки на кривой Безье
+                   
                     x1, y1 = self.bezier_point(points, t1)
                     x2, y2 = self.bezier_point(points, t2)
                     r1 = self.bezier_radius(radii, t1)
                     r2 = self.bezier_radius(radii, t2)
 
-                    # Преобразуем координаты с учетом масштаба и смещения
+                    
                     canvas_x1 = (x1 * self.zoom_level) + self.image_offset[0]
                     canvas_y1 = (y1 * self.zoom_level) + self.image_offset[1]
                     canvas_x2 = (x2 * self.zoom_level) + self.image_offset[0]
@@ -299,7 +296,7 @@ class FontEditor:
                     canvas_r1 = max(1, r1 * self.zoom_level)  # Не меньше 1 пикселя
                     canvas_r2 = max(1, r2 * self.zoom_level)
 
-                    # Рисуем сегмент кривой с плавным изменением ширины
+                   
                     segment_steps = max(3, int(math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)))
                     for j in range(segment_steps):
                         t = j / (segment_steps - 1)
@@ -309,7 +306,7 @@ class FontEditor:
 
                         cx = (x * self.zoom_level) + self.image_offset[0]
                         cy = (y * self.zoom_level) + self.image_offset[1]
-                        cr = max(1, radius * self.zoom_level)  # Не меньше 1 пикселя
+                        cr = max(1, radius * self.zoom_level) 
 
                         draw.ellipse(
                             [cx - cr, cy - cr, cx + cr, cy + cr],
@@ -322,12 +319,11 @@ class FontEditor:
                 for x, y, radius in curve:
                     cx = (x * self.zoom_level) + self.image_offset[0]
                     cy = (y * self.zoom_level) + self.image_offset[1]
-                    cr = max(1, radius * self.zoom_level)  # Не меньше 1 пикселя
-
+                    cr = max(1, radius * self.zoom_level)  
                     draw.ellipse(
                         [cx - cr, cy - cr, cx + cr, cy + cr],
                         fill=self.point_color,
-                        outline=(0, 0, 0, 255)  # Черная граница для видимости
+                        outline=(0, 0, 0, 255)  
                     )
 
             self.image_tk = ImageTk.PhotoImage(offset_image)
@@ -376,31 +372,29 @@ class FontEditor:
             if len(curve) < 2:
                 continue
 
-            # Создаем список точек для кривой Безье
             points = [(p[0], p[1]) for p in curve]
             radii = [p[2] for p in curve]
 
-            # Рисуем кривую Безье с переменной шириной (без точек в правом окне)
             steps = 20
             for i in range(steps):
                 t1 = i / steps
                 t2 = (i + 1) / steps
 
-                # Вычисляем точки на кривой Безье
+                
                 x1, y1 = self.bezier_point(points, t1)
                 x2, y2 = self.bezier_point(points, t2)
                 r1 = self.bezier_radius(radii, t1)
                 r2 = self.bezier_radius(radii, t2)
 
-                # Преобразуем координаты для предпросмотра
+               
                 px1 = (x1 * self.preview_zoom) + self.preview_offset[0]
                 py1 = (y1 * self.preview_zoom) + self.preview_offset[1]
                 px2 = (x2 * self.preview_zoom) + self.preview_offset[0]
                 py2 = (y2 * self.preview_zoom) + self.preview_offset[1]
-                pr1 = max(1, r1 * self.preview_zoom)  # Не меньше 1 пикселя
+                pr1 = max(1, r1 * self.preview_zoom)  
                 pr2 = max(1, r2 * self.preview_zoom)
 
-                # Рисуем сегмент кривой с плавным изменением ширины
+                
                 segment_steps = max(3, int(math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)))
                 for j in range(segment_steps):
                     t = j / (segment_steps - 1)
