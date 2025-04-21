@@ -1,6 +1,6 @@
 import os
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk, ImageDraw
 import math
 
@@ -10,10 +10,10 @@ class FontEditor:
         self.root = root
         self.root.title("Редактор шрифтов")
 
-        
+        # Настройка главного окна
         self.root.geometry("1200x800")
 
-        
+        # Переменные для хранения данных
         self.image_path = None
         self.original_image = None
         self.display_image = None
@@ -30,19 +30,22 @@ class FontEditor:
         self.image_offset = [0, 0]
         self.image_drag_start = None
 
-        
-        self.mode = "draw" 
-        self.point_operation = "add"  
+        # Режимы работы
+        self.mode = "draw"  # 'draw' - рисование, 'pan' - перемещение
+        self.point_operation = "add"  # 'add' - добавление, 'resize' - изменение размера
+        self.connect_mode = False  # Режим соединения кривых
+        self.connect_start_point = None  # Начальная точка для соединения
 
-        
-        self.min_radius = 1  
+        # Цвета и параметры
+        self.min_radius = 1  # Минимальный размер круга 1 пиксель
         self.max_radius = 20
         self.default_radius = 5
-        self.point_color = (255, 0, 0, 128) 
-        self.curve_color = (0, 0, 255, 128)  
+        self.point_color = (255, 0, 0, 128)  # Полупрозрачный красный (RGBA)
+        self.curve_color = (0, 0, 255, 128)  # Полупрозрачный синий
         self.preview_color = "black"
+        self.connect_color = (255, 165, 0, 200)  # Оранжевый для линий соединения
 
-       
+        # Создание интерфейса
         self.create_widgets()
 
         # Привязка событий
@@ -91,6 +94,10 @@ class FontEditor:
                                     command=self.toggle_resize_mode)
         self.resize_btn.pack(side=tk.LEFT, padx=5)
 
+        self.connect_btn = tk.Button(self.left_toolbar, text="Соединить кривые (C)",
+                                     command=self.toggle_connect_mode)
+        self.connect_btn.pack(side=tk.LEFT, padx=5)
+
         # Правая панель (предпросмотр)
         self.preview_canvas = tk.Canvas(self.right_frame, bg="white", cursor="hand2")
         self.preview_canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
@@ -116,18 +123,19 @@ class FontEditor:
         self.preview_zoom_out.pack(side=tk.LEFT, padx=5)
 
     def bind_events(self):
-       
+        # События левой панели
         self.image_canvas.bind("<Button-1>", self.on_image_click)
         self.image_canvas.bind("<B1-Motion>", self.on_image_drag)
         self.image_canvas.bind("<ButtonRelease-1>", self.on_image_release)
         self.image_canvas.bind("<MouseWheel>", self.on_mouse_wheel)  # Изменение размера круга
 
-        
+        # Горячие клавиши
         self.root.bind("<d>", lambda e: self.set_mode("draw"))
         self.root.bind("<p>", lambda e: self.set_mode("pan"))
         self.root.bind("<r>", lambda e: self.toggle_resize_mode())
+        self.root.bind("<c>", lambda e: self.toggle_connect_mode())
 
-        
+        # События правой панели
         self.preview_canvas.bind("<Button-1>", self.start_pan)
         self.preview_canvas.bind("<B1-Motion>", self.pan_preview)
         self.preview_canvas.bind("<ButtonRelease-1>", self.stop_pan)
@@ -139,11 +147,29 @@ class FontEditor:
         else:
             self.image_canvas.config(cursor="hand1")
 
+        # Выходим из режима соединения при смене режима
+        if mode != "draw":
+            self.connect_mode = False
+            self.connect_start_point = None
+            self.connect_btn.config(relief=tk.RAISED)
+            self.update_image_display()
+
     def toggle_resize_mode(self):
         self.point_operation = "resize" if self.point_operation == "add" else "add"
         self.resize_btn.config(
             text=f"Режим {'добавления' if self.point_operation == 'add' else 'изменения размера'} (R)"
         )
+
+    def toggle_connect_mode(self):
+        self.connect_mode = not self.connect_mode
+        if self.connect_mode:
+            self.set_mode("draw")  # Переключаемся в режим рисования
+            self.connect_btn.config(relief=tk.SUNKEN)
+        else:
+            self.connect_start_point = None
+            self.connect_btn.config(relief=tk.RAISED)
+
+        self.update_image_display()
 
     def load_image(self):
         file_path = filedialog.askopenfilename(
@@ -175,11 +201,49 @@ class FontEditor:
                     distance = math.sqrt((event.x - canvas_px) ** 2 + (event.y - canvas_py) ** 2)
 
                     if distance <= radius * self.zoom_level:
-                        self.selected_point = (curve_idx, point_idx)
+                        if self.connect_mode:
+                            if self.connect_start_point is None:
+                                # Выбираем первую точку для соединения
+                                self.connect_start_point = (curve_idx, point_idx)
+                            else:
+                                # Соединяем точки
+                                start_curve, start_point = self.connect_start_point
+                                end_curve, end_point = (curve_idx, point_idx)
+
+                                # Проверяем, что точки из разных кривых
+                                if start_curve != end_curve:
+                                    # Получаем координаты точек
+                                    if start_curve < len(self.all_curves):
+                                        x1, y1, r1 = self.all_curves[start_curve][start_point]
+                                    else:
+                                        x1, y1, r1 = self.current_curve[start_point]
+
+                                    if end_curve < len(self.all_curves):
+                                        x2, y2, r2 = self.all_curves[end_curve][end_point]
+                                    else:
+                                        x2, y2, r2 = self.current_curve[end_point]
+
+                                    # Создаем новую кривую-соединение
+                                    avg_radius = (r1 + r2) / 2
+                                    connection_curve = [
+                                        (x1, y1, r1),
+                                        ((x1 + x2) / 2, (y1 + y2) / 2, avg_radius),
+                                        (x2, y2, r2)
+                                    ]
+                                    self.all_curves.append(connection_curve)
+
+                                # Сбрасываем режим соединения
+                                self.connect_start_point = None
+                                self.connect_mode = False
+                                self.connect_btn.config(relief=tk.RAISED)
+                        else:
+                            self.selected_point = (curve_idx, point_idx)
+                        self.update_image_display()
                         return
 
             # Добавление новой точки
-            if self.point_operation == "add" and len(self.current_curve) < 6:  
+            if not self.connect_mode and self.point_operation == "add" and len(
+                    self.current_curve) < 6:  # До 6 точек для 5-й степени
                 self.current_curve.append((x, y, self.default_radius))
                 self.update_image_display()
                 self.update_preview()
@@ -235,22 +299,23 @@ class FontEditor:
         self.image_drag_start = None
 
     def bezier_point(self, points, t):
-        
+        """Вычисляет точку на кривой Безье для заданного t (0-1)"""
         n = len(points) - 1
         x, y = 0.0, 0.0
         for i, (px, py) in enumerate(points):
             # Биномиальный коэффициент
-            coeff = math.comb(n, i) * (1 - t)**(n - i) * t**i
+            coeff = math.comb(n, i) * (1 - t) ** (n - i) * t ** i
             x += px * coeff
             y += py * coeff
         return x, y
 
     def bezier_radius(self, radii, t):
-       
+        """Вычисляет радиус на кривой Безье для заданного t (0-1)"""
         n = len(radii) - 1
         r = 0.0
         for i, radius in enumerate(radii):
-            coeff = math.comb(n, i) * (1 - t)**(n - i) * t**i
+            # Биномиальный коэффициент
+            coeff = math.comb(n, i) * (1 - t) ** (n - i) * t ** i
             r += radius * coeff
         return r
 
@@ -274,21 +339,23 @@ class FontEditor:
                 if len(curve) < 2:
                     continue
 
+                # Создаем список точек для кривой Безье
                 points = [(p[0], p[1]) for p in curve]
                 radii = [p[2] for p in curve]
 
+                # Рисуем кривую Безье с переменной шириной
                 steps = 20
                 for i in range(steps):
                     t1 = i / steps
                     t2 = (i + 1) / steps
 
-                   
+                    # Вычисляем точки на кривой Безье
                     x1, y1 = self.bezier_point(points, t1)
                     x2, y2 = self.bezier_point(points, t2)
                     r1 = self.bezier_radius(radii, t1)
                     r2 = self.bezier_radius(radii, t2)
 
-                    
+                    # Преобразуем координаты с учетом масштаба и смещения
                     canvas_x1 = (x1 * self.zoom_level) + self.image_offset[0]
                     canvas_y1 = (y1 * self.zoom_level) + self.image_offset[1]
                     canvas_x2 = (x2 * self.zoom_level) + self.image_offset[0]
@@ -296,7 +363,7 @@ class FontEditor:
                     canvas_r1 = max(1, r1 * self.zoom_level)  # Не меньше 1 пикселя
                     canvas_r2 = max(1, r2 * self.zoom_level)
 
-                   
+                    # Рисуем сегмент кривой с плавным изменением ширины
                     segment_steps = max(3, int(math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)))
                     for j in range(segment_steps):
                         t = j / (segment_steps - 1)
@@ -306,7 +373,7 @@ class FontEditor:
 
                         cx = (x * self.zoom_level) + self.image_offset[0]
                         cy = (y * self.zoom_level) + self.image_offset[1]
-                        cr = max(1, radius * self.zoom_level) 
+                        cr = max(1, radius * self.zoom_level)  # Не меньше 1 пикселя
 
                         draw.ellipse(
                             [cx - cr, cy - cr, cx + cr, cy + cr],
@@ -319,11 +386,46 @@ class FontEditor:
                 for x, y, radius in curve:
                     cx = (x * self.zoom_level) + self.image_offset[0]
                     cy = (y * self.zoom_level) + self.image_offset[1]
-                    cr = max(1, radius * self.zoom_level)  
+                    cr = max(1, radius * self.zoom_level)  # Не меньше 1 пикселя
+
                     draw.ellipse(
                         [cx - cr, cy - cr, cx + cr, cy + cr],
                         fill=self.point_color,
-                        outline=(0, 0, 0, 255)  
+                        outline=(0, 0, 0, 255)  # Черная граница для видимости
+                    )
+
+            # Отрисовка линии соединения в режиме соединения
+            if self.connect_mode and self.connect_start_point is not None:
+                curve_idx, point_idx = self.connect_start_point
+                if curve_idx < len(self.all_curves):
+                    x1, y1, r1 = self.all_curves[curve_idx][point_idx]
+                else:
+                    x1, y1, r1 = self.current_curve[point_idx]
+
+                # Получаем текущую позицию мыши
+                mouse_x = (self.root.winfo_pointerx() - self.root.winfo_rootx() -
+                           self.image_canvas.winfo_x() - self.image_offset[0]) / self.zoom_level
+                mouse_y = (self.root.winfo_pointery() - self.root.winfo_rooty() -
+                           self.image_canvas.winfo_y() - self.image_offset[1]) / self.zoom_level
+
+                # Рисуем временную линию соединения
+                canvas_x1 = (x1 * self.zoom_level) + self.image_offset[0]
+                canvas_y1 = (y1 * self.zoom_level) + self.image_offset[1]
+                canvas_x2 = (mouse_x * self.zoom_level) + self.image_offset[0]
+                canvas_y2 = (mouse_y * self.zoom_level) + self.image_offset[1]
+
+                # Рисуем линию с плавным изменением ширины
+                steps = 20
+                for i in range(steps):
+                    t = i / (steps - 1)
+                    x = canvas_x1 + (canvas_x2 - canvas_x1) * t
+                    y = canvas_y1 + (canvas_y2 - canvas_y1) * t
+                    radius = max(1, (r1 * self.zoom_level) * (1 - t * 0.5))  # Плавное уменьшение радиуса
+
+                    draw.ellipse(
+                        [x - radius, y - radius, x + radius, y + radius],
+                        fill=self.connect_color,
+                        outline=self.connect_color
                     )
 
             self.image_tk = ImageTk.PhotoImage(offset_image)
@@ -372,29 +474,31 @@ class FontEditor:
             if len(curve) < 2:
                 continue
 
+            # Создаем список точек для кривой Безье
             points = [(p[0], p[1]) for p in curve]
             radii = [p[2] for p in curve]
 
+            # Рисуем кривую Безье с переменной шириной (без точек в правом окне)
             steps = 20
             for i in range(steps):
                 t1 = i / steps
                 t2 = (i + 1) / steps
 
-                
+                # Вычисляем точки на кривой Безье
                 x1, y1 = self.bezier_point(points, t1)
                 x2, y2 = self.bezier_point(points, t2)
                 r1 = self.bezier_radius(radii, t1)
                 r2 = self.bezier_radius(radii, t2)
 
-               
+                # Преобразуем координаты для предпросмотра
                 px1 = (x1 * self.preview_zoom) + self.preview_offset[0]
                 py1 = (y1 * self.preview_zoom) + self.preview_offset[1]
                 px2 = (x2 * self.preview_zoom) + self.preview_offset[0]
                 py2 = (y2 * self.preview_zoom) + self.preview_offset[1]
-                pr1 = max(1, r1 * self.preview_zoom)  
+                pr1 = max(1, r1 * self.preview_zoom)  # Не меньше 1 пикселя
                 pr2 = max(1, r2 * self.preview_zoom)
 
-                
+                # Рисуем сегмент кривой с плавным изменением ширины
                 segment_steps = max(3, int(math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)))
                 for j in range(segment_steps):
                     t = j / (segment_steps - 1)
